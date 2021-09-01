@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "module": "CommonJS",
+        "strict": true,
+        "target": "ES2021",
+        "esModuleInterop": true,
+        "outDir": "build/",
+        "skipLibCheck": true,
+        "typeRoots": ["src/declarations/", "node_modules/@types/"],
+        "types": ["@youtwitface/escape-html"]
+    },
+    "include": ["src/"]
+}
