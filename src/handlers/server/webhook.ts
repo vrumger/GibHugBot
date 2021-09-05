@@ -42,7 +42,11 @@ export const handleWebhook = async (
                     body.issue.title,
                 )}</a></b>\nby <a href="${body.issue.user.html_url}">@${
                     body.issue.user.login
-                }</a>\n\n${escapeHtml(body.issue.body ?? '')}`;
+                }</a>\n\n${
+                    body.issue.body
+                        ? escapeHtml(body.issue.body)
+                        : '<i>No description provided.</i>'
+                }`;
 
                 await bot.api.sendMessage(hook.chat_id, message, {
                     parse_mode: 'HTML',
@@ -91,9 +95,11 @@ export const handleWebhook = async (
                     body.pull_request.number
                 } ${escapeHtml(body.pull_request.title)}</a></b>\nby <a href="${
                     body.pull_request.user.html_url
-                }">@${body.pull_request.user.login}</a>\n\n${escapeHtml(
-                    body.pull_request.body ?? '',
-                )}`;
+                }">@${body.pull_request.user.login}</a>\n\n${
+                    body.pull_request.body
+                        ? escapeHtml(body.pull_request.body)
+                        : '<i>No description provided.</i>'
+                }`;
 
                 await bot.api.sendMessage(hook.chat_id, message, {
                     parse_mode: 'HTML',
