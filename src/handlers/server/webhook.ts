@@ -12,24 +12,27 @@ export const handleWebhook = async (
 ) => {
     switch (event) {
         case 'push': {
-            const message = `🔨 <b><a href="${body.compare}">${
-                body.commits.length
-            } new commit${body.commits.length === 1 ? '' : 's'}</a> to ${
-                body.repository.name
-            }:${body.ref.split('/')[2]}:</b>\n\n${body.commits.map(
-                (commit: any) =>
-                    `<a href="${commit.url}">${commit.id.slice(
-                        0,
-                        8,
-                    )}</a>: ${escapeHtml(commit.message)} by ${escapeHtml(
-                        commit.author.name,
-                    )}`,
-            )}`;
+            if (body.commits.length > 0) {
+                const message = `🔨 <b><a href="${body.compare}">${
+                    body.commits.length
+                } new commit${body.commits.length === 1 ? '' : 's'}</a> to ${
+                    body.repository.name
+                }:${body.ref.split('/')[2]}:</b>\n\n${body.commits.map(
+                    (commit: any) =>
+                        `<a href="${commit.url}">${commit.id.slice(
+                            0,
+                            8,
+                        )}</a>: ${escapeHtml(commit.message)} by ${escapeHtml(
+                            commit.author.name,
+                        )}`,
+                )}`;
 
-            await bot.api.sendMessage(hook.chat_id, message, {
-                parse_mode: 'HTML',
-                disable_web_page_preview: true,
-            });
+                await bot.api.sendMessage(hook.chat_id, message, {
+                    parse_mode: 'HTML',
+                    disable_web_page_preview: true,
+                });
+            }
+
             res.status(200).end('ok');
             break;
         }
