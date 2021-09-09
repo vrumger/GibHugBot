@@ -14,6 +14,7 @@ const hookSchema = new Schema(
         },
         hook_id: {
             type: Number,
+            unique: true,
             required: true,
         },
         secret: {

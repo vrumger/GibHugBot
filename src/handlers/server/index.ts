@@ -87,7 +87,7 @@ router.post(
         }
 
         const hook = await Hook.findOne({
-            hookId: githubHookId,
+            hook_id: Number(githubHookId),
         });
 
         if (!hook) {
