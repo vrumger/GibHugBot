@@ -17,15 +17,17 @@ export const handleWebhook = async (
                     body.commits.length
                 } new commit${body.commits.length === 1 ? '' : 's'}</a> to ${
                     body.repository.name
-                }:${body.ref.split('/')[2]}:</b>\n\n${body.commits.map(
-                    (commit: any) =>
-                        `<a href="${commit.url}">${commit.id.slice(
-                            0,
-                            8,
-                        )}</a>: ${escapeHtml(commit.message)} by ${escapeHtml(
-                            commit.author.name,
-                        )}`,
-                )}`;
+                }:${body.ref.split('/')[2]}:</b>\n\n${body.commits
+                    .map(
+                        (commit: any) =>
+                            `<a href="${commit.url}">${commit.id.slice(
+                                0,
+                                8,
+                            )}</a>: ${escapeHtml(
+                                commit.message,
+                            )} by ${escapeHtml(commit.author.name)}`,
+                    )
+                    .join('\n')}`;
 
                 await bot.api.sendMessage(hook.chat_id, message, {
                     parse_mode: 'HTML',
