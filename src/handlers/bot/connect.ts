@@ -1,5 +1,5 @@
 import { Composer, Context } from 'grammy';
-import { Chat } from 'grammy/out/platform';
+import { Chat } from '@grammyjs/types';
 import env from '../../env';
 import State from '../../models/state';
 
