@@ -3,7 +3,13 @@ import type { User } from 'grammy/types';
 import escapeHtml from '@youtwitface/escape-html';
 import { Repo, listRepos } from '../../github';
 import Token from '../../models/token';
-import { connectRepo, getCachedRepos, mentionUser, repoLink } from './utils';
+import {
+    connectRepo,
+    getCachedRepos,
+    getThreadId,
+    mentionUser,
+    repoLink,
+} from './utils';
 
 const RECENT_REPOS_LIMIT = 5;
 const INLINE_RESULTS_LIMIT = 50;
@@ -130,6 +136,7 @@ composer
             token.access_token,
             repo,
             ctx.chat.id,
+            getThreadId(ctx.msg),
         );
 
         await ctx.reply(
@@ -162,7 +169,12 @@ composer.callbackQuery(/^repo:(\d+):(.+)$/, async ctx => {
         return;
     }
 
-    const connected = await connectRepo(token.access_token, repo, ctx.chat.id);
+    const connected = await connectRepo(
+        token.access_token,
+        repo,
+        ctx.chat.id,
+        getThreadId(ctx.callbackQuery.message),
+    );
 
     if (!connected) {
         await ctx.answerCallbackQuery({

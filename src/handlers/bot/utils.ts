@@ -15,6 +15,12 @@ export const mentionUser = (user: User) =>
         ? `@${user.username}`
         : `<a href="tg://user?id=${user.id}">${escapeHtml(user.first_name)}</a>`;
 
+// Only forum topic messages belong to a topic; in other chats `message_thread_id` refers to reply threads.
+export const getThreadId = (msg?: {
+    is_topic_message?: boolean;
+    message_thread_id?: number;
+}) => (msg?.is_topic_message ? msg.message_thread_id : undefined);
+
 const reposCache = new Map<number, { repos: Repo[]; expires: number }>();
 
 export const getCachedRepos = async (userId: number, accessToken: string) => {
@@ -33,6 +39,7 @@ export const connectRepo = async (
     accessToken: string,
     repo: string,
     chatId: number,
+    threadId?: number,
 ) => {
     const secret = randomBytes(20).toString('hex');
 
@@ -44,6 +51,11 @@ export const connectRepo = async (
         return false;
     }
 
-    await new Hook({ chat_id: chatId, hook_id: hookId, secret }).save();
+    await new Hook({
+        chat_id: chatId,
+        thread_id: threadId,
+        hook_id: hookId,
+        secret,
+    }).save();
     return true;
 };

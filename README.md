@@ -17,6 +17,8 @@ Connect your GitHub account, pick a repository, and the bot sets up a webhook th
 2. In any chat where the bot is present, send `/new` and pick a repository from the list, or tap **Search** to find one.
 3. You can also connect a repository from any chat with inline mode: type `@<bot username> search <query>` and select a repository.
 
+In groups with topics enabled, connect the repository from inside a topic and its notifications are posted to that topic.
+
 You need admin access to a repository to connect it, because the bot creates a webhook on it.
 
 ## Self-hosting

@@ -3,6 +3,13 @@ import { Request, Response } from 'express';
 import bot from '../../bot';
 import { IHook } from '../../models/hook';
 
+const sendMessage = (hook: IHook, message: string) =>
+    bot.api.sendMessage(hook.chat_id, message, {
+        message_thread_id: hook.thread_id,
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+    });
+
 export const handleWebhook = async (
     req: Request<{ repo: string }>,
     res: Response,
@@ -29,10 +36,7 @@ export const handleWebhook = async (
                     )
                     .join('\n')}`;
 
-                await bot.api.sendMessage(hook.chat_id, message, {
-                    parse_mode: 'HTML',
-                    link_preview_options: { is_disabled: true },
-                });
+                await sendMessage(hook, message);
             }
 
             res.status(200).end('ok');
@@ -53,10 +57,7 @@ export const handleWebhook = async (
                         : '<i>No description provided.</i>'
                 }`;
 
-                await bot.api.sendMessage(hook.chat_id, message, {
-                    parse_mode: 'HTML',
-                    link_preview_options: { is_disabled: true },
-                });
+                await sendMessage(hook, message);
 
                 res.status(200).end('ok');
             } else {
@@ -76,10 +77,7 @@ export const handleWebhook = async (
                     body.comment.user.login
                 }</a>\n\n${escapeHtml(body.comment.body ?? '')}`;
 
-                await bot.api.sendMessage(hook.chat_id, message, {
-                    parse_mode: 'HTML',
-                    link_preview_options: { is_disabled: true },
-                });
+                await sendMessage(hook, message);
 
                 res.status(200).end('ok');
             } else {
@@ -106,10 +104,7 @@ export const handleWebhook = async (
                         : '<i>No description provided.</i>'
                 }`;
 
-                await bot.api.sendMessage(hook.chat_id, message, {
-                    parse_mode: 'HTML',
-                    link_preview_options: { is_disabled: true },
-                });
+                await sendMessage(hook, message);
                 res.status(200).end('ok');
             } else {
                 res.status(200).end(
