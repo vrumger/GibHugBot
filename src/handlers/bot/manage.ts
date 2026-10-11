@@ -9,6 +9,8 @@ const NOT_ALLOWED_TEXT =
     'Only chat admins and the user who connected this repository can manage it.';
 const NOT_FOUND_TEXT = 'This integration no longer exists.';
 
+const PAGE_SIZE = 8;
+
 const hookName = (hook: IHook) =>
     hook.repo ?? `Unknown repository (hook ${hook.hook_id})`;
 
@@ -23,22 +25,44 @@ const hookTitle = (hook: IHook) =>
 const webhooksSettingsLink = (repo: string) =>
     `<a href="https://github.com/${repo}/settings/hooks">webhook settings</a>`;
 
-const buildList = async (chatId: number, notice?: string) => {
-    const hooks = await Hook.find({ chat_id: chatId }).sort({ createdAt: 1 });
+const buildList = async (chatId: number, page = 0, notice?: string) => {
     const prefix = notice ? `${notice}\n\n` : '';
+    const total = await Hook.countDocuments({ chat_id: chatId });
 
-    if (hooks.length === 0) {
+    if (total === 0) {
         return { text: prefix + NO_INTEGRATIONS_TEXT };
     }
 
+    // Clamp in case integrations were removed since the page was shown.
+    const pageCount = Math.ceil(total / PAGE_SIZE);
+    const currentPage = Math.min(Math.max(page, 0), pageCount - 1);
+
+    const hooks = await Hook.find({ chat_id: chatId })
+        .sort({ createdAt: 1, _id: 1 })
+        .skip(currentPage * PAGE_SIZE)
+        .limit(PAGE_SIZE);
+
     const keyboard = new InlineKeyboard();
     for (const hook of hooks) {
-        keyboard.text(hookLabel(hook), `integration:${hook.hook_id}`).row();
+        keyboard
+            .text(hookLabel(hook), `integration:${hook.hook_id}:${currentPage}`)
+            .row();
+    }
+
+    if (pageCount > 1) {
+        if (currentPage > 0) {
+            keyboard.text('‹', `integrations:list:${currentPage - 1}`);
+        }
+        keyboard.text(`${currentPage + 1}/${pageCount}`, 'integrations:noop');
+        if (currentPage < pageCount - 1) {
+            keyboard.text('›', `integrations:list:${currentPage + 1}`);
+        }
+        keyboard.row();
     }
     keyboard.text('Close', 'integrations:close');
 
     return {
-        text: `${prefix}Repositories connected to this chat (${hooks.length}). Choose one to manage it:`,
+        text: `${prefix}Repositories connected to this chat (${total}). Choose one to manage it:`,
         reply_markup: keyboard,
     };
 };
@@ -82,15 +106,20 @@ composer.command('integrations', async ctx => {
     await ctx.reply(text, { ...editOptions, reply_markup });
 });
 
-composer.callbackQuery('integrations:list', async ctx => {
+composer.callbackQuery(/^integrations:list(?::(\d+))?$/, async ctx => {
     if (!ctx.chat) {
         return ctx.answerCallbackQuery();
     }
 
-    const { text, reply_markup } = await buildList(ctx.chat.id);
+    const { text, reply_markup } = await buildList(
+        ctx.chat.id,
+        Number(ctx.match![1] ?? 0),
+    );
     await ctx.answerCallbackQuery();
     await ctx.editMessageText(text, { ...editOptions, reply_markup });
 });
+
+composer.callbackQuery('integrations:noop', ctx => ctx.answerCallbackQuery());
 
 composer.callbackQuery('integrations:close', async ctx => {
     await ctx.answerCallbackQuery();
@@ -98,24 +127,31 @@ composer.callbackQuery('integrations:close', async ctx => {
 });
 
 // Every action on a single integration looks up the hook within the current chat and checks permissions first.
+// The callback data also carries the list page to return to.
 const hookAction = (
     action: string,
-    handler: (ctx: Context, hook: IHook) => Promise<unknown>,
+    handler: (ctx: Context, hook: IHook, page: number) => Promise<unknown>,
 ) =>
     composer.callbackQuery(
-        new RegExp(`^integration${action ? `:${action}` : ''}:(\\d+)$`),
+        new RegExp(
+            `^integration${action ? `:${action}` : ''}:(\\d+)(?::(\\d+))?$`,
+        ),
         async ctx => {
             if (!ctx.chat) {
                 return ctx.answerCallbackQuery();
             }
 
+            const page = Number(ctx.match![2] ?? 0);
             const hook = await Hook.findOne({
                 chat_id: ctx.chat.id,
                 hook_id: Number(ctx.match![1]),
             });
 
             if (!hook) {
-                const { text, reply_markup } = await buildList(ctx.chat.id);
+                const { text, reply_markup } = await buildList(
+                    ctx.chat.id,
+                    page,
+                );
                 await ctx.answerCallbackQuery({ text: NOT_FOUND_TEXT });
                 await ctx.editMessageText(text, {
                     ...editOptions,
@@ -132,11 +168,11 @@ const hookAction = (
                 return;
             }
 
-            await handler(ctx, hook);
+            await handler(ctx, hook, page);
         },
     );
 
-hookAction('', async (ctx, hook) => {
+hookAction('', async (ctx, hook, page) => {
     const lines = [`<b>${hookTitle(hook)}</b>`];
 
     if (hook.thread_id) {
@@ -150,9 +186,9 @@ hookAction('', async (ctx, hook) => {
     lines.push(`Connected on: ${hook.createdAt.toISOString().slice(0, 10)}`);
 
     const keyboard = new InlineKeyboard()
-        .text('🗑 Remove', `integration:remove:${hook.hook_id}`)
+        .text('🗑 Remove', `integration:remove:${hook.hook_id}:${page}`)
         .row()
-        .text('« Back', 'integrations:list');
+        .text('« Back', `integrations:list:${page}`);
 
     await ctx.answerCallbackQuery();
     await ctx.editMessageText(lines.join('\n'), {
@@ -161,11 +197,11 @@ hookAction('', async (ctx, hook) => {
     });
 });
 
-hookAction('remove', async (ctx, hook) => {
+hookAction('remove', async (ctx, hook, page) => {
     const keyboard = new InlineKeyboard()
-        .text('Yes, remove it', `integration:confirm:${hook.hook_id}`)
+        .text('Yes, remove it', `integration:confirm:${hook.hook_id}:${page}`)
         .row()
-        .text('« Back', `integration:${hook.hook_id}`);
+        .text('« Back', `integration:${hook.hook_id}:${page}`);
 
     await ctx.answerCallbackQuery();
     await ctx.editMessageText(
@@ -174,7 +210,7 @@ hookAction('remove', async (ctx, hook) => {
     );
 });
 
-hookAction('confirm', async (ctx, hook) => {
+hookAction('confirm', async (ctx, hook, page) => {
     const deletedOnGitHub = await disconnectRepo(hook, ctx.from!.id);
 
     let notice = `${mentionUser(ctx.from!)} removed ${hookTitle(hook)} from this chat.`;
@@ -184,7 +220,7 @@ hookAction('confirm', async (ctx, hook) => {
             : " The webhook couldn't be deleted from GitHub, so delete it manually in the repository's webhook settings.";
     }
 
-    const { text, reply_markup } = await buildList(ctx.chat!.id, notice);
+    const { text, reply_markup } = await buildList(ctx.chat!.id, page, notice);
     await ctx.answerCallbackQuery({ text: 'Removed' });
     await ctx.editMessageText(text, { ...editOptions, reply_markup });
 });
