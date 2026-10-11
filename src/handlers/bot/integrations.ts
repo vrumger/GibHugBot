@@ -1,12 +1,24 @@
-import { randomBytes } from 'crypto';
-import { Composer, InlineKeyboard } from 'grammy';
+import { Composer, InlineKeyboard, InlineQueryResultBuilder } from 'grammy';
+import type { User } from 'grammy/types';
 import escapeHtml from '@youtwitface/escape-html';
-import env from '../../env';
-import Hook from '../../models/hook';
+import { Repo, listRepos } from '../../github';
 import Token from '../../models/token';
+import { connectRepo, getCachedRepos, mentionUser, repoLink } from './utils';
 
-const base64 = (data: string) =>
-    Buffer.from(data).toString('base64').replace(/=+$/, '');
+const RECENT_REPOS_LIMIT = 5;
+const INLINE_RESULTS_LIMIT = 50;
+
+const NOT_CONNECTED_TEXT = 'You need to connect your GitHub account first.';
+
+// Inline results send this message, which is then picked up to connect the repo.
+const connectMessage = (repo: string) => `🔗 Connecting ${repo} to this chat…`;
+const CONNECT_MESSAGE_REGEX = /^🔗 Connecting (\S+) to this chat…$/;
+
+const connectedText = (user: User, repo: string) =>
+    `${mentionUser(user)} has connected ${repoLink(repo)} to this chat.`;
+
+const connectFailedText = (repo: string) =>
+    `Failed to connect ${repo}. Make sure you have admin access to it.`;
 
 const composer = new Composer();
 
@@ -16,9 +28,7 @@ composer.command('new', async ctx => {
     }
 
     const userId = ctx.from.id;
-    const token = await Token.findOne({
-        user_id: userId,
-    });
+    const token = await Token.findOne({ user_id: userId });
 
     if (!token) {
         await ctx.reply(
@@ -28,18 +38,9 @@ composer.command('new', async ctx => {
         return;
     }
 
-    const request = await fetch(
-        'https://api.github.com/user/repos?affiliation=owner,organization_member&sort=updated&per_page=5',
-        {
-            headers: {
-                Accept: 'application/vnd.github.v3+json',
-                Authorization: `token ${token.access_token}`,
-            },
-        },
-    );
-    const response = (await request.json()) as any[];
+    const repos = await listRepos(token.access_token, RECENT_REPOS_LIMIT);
 
-    const keyboard = response
+    const keyboard = repos
         .reduce(
             (keyboard, repo) =>
                 keyboard
@@ -49,18 +50,95 @@ composer.command('new', async ctx => {
         )
         .switchInlineCurrent('Search', 'search ');
 
-    await ctx.reply('Choose a repo:', {
-        reply_markup: keyboard,
+    await ctx.reply('Choose a repo:', { reply_markup: keyboard });
+});
+
+composer.inlineQuery(/^search(?:\s+(.*))?$/is, async ctx => {
+    const query = (ctx.match![1] ?? '').trim().toLowerCase();
+    const token = await Token.findOne({ user_id: ctx.from.id });
+
+    if (!token) {
+        await ctx.answerInlineQuery([], {
+            cache_time: 0,
+            is_personal: true,
+            button: {
+                text: 'Connect your GitHub account',
+                start_parameter: 'connect',
+            },
+        });
+        return;
+    }
+
+    let repos: Repo[];
+    try {
+        repos = await getCachedRepos(ctx.from.id, token.access_token);
+    } catch (error) {
+        console.error(error);
+        await ctx.answerInlineQuery([], { cache_time: 0, is_personal: true });
+        return;
+    }
+
+    const matches = query
+        ? repos.filter(repo => repo.full_name.toLowerCase().includes(query))
+        : repos;
+
+    const offset = Number(ctx.inlineQuery.offset) || 0;
+    const nextOffset = offset + INLINE_RESULTS_LIMIT;
+
+    const results = matches.slice(offset, nextOffset).map((repo, index) =>
+        InlineQueryResultBuilder.article(
+            String(offset + index),
+            repo.full_name,
+            {
+                description: repo.description ?? undefined,
+                thumbnail_url: repo.owner.avatar_url,
+            },
+        ).text(connectMessage(repo.full_name)),
+    );
+
+    await ctx.answerInlineQuery(results, {
+        cache_time: 10,
+        is_personal: true,
+        next_offset: nextOffset < matches.length ? String(nextOffset) : '',
     });
 });
 
-composer.inlineQuery(/^search (.+)/i, async ctx => {
-    const query = ctx.match![1];
+composer
+    .on('message:text')
+    .filter(
+        ctx =>
+            ctx.msg.via_bot?.id === ctx.me.id &&
+            !ctx.msg.forward_origin &&
+            CONNECT_MESSAGE_REGEX.test(ctx.msg.text),
+    )
+    .use(async ctx => {
+        const [, repo] = ctx.msg.text.match(CONNECT_MESSAGE_REGEX)!;
+        const replyOptions = {
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+            reply_parameters: { message_id: ctx.msg.message_id },
+        } as const;
 
-    // TODO:
+        const token = await Token.findOne({ user_id: ctx.from.id });
 
-    await ctx.answerInlineQuery([]);
-});
+        if (!token) {
+            await ctx.reply(NOT_CONNECTED_TEXT, replyOptions);
+            return;
+        }
+
+        const connected = await connectRepo(
+            token.access_token,
+            repo,
+            ctx.chat.id,
+        );
+
+        await ctx.reply(
+            connected
+                ? connectedText(ctx.from, repo)
+                : escapeHtml(connectFailedText(repo)),
+            replyOptions,
+        );
+    });
 
 composer.callbackQuery(/^repo:(\d+):(.+)$/, async ctx => {
     const [, userId, repo] = ctx.match!;
@@ -70,56 +148,34 @@ composer.callbackQuery(/^repo:(\d+):(.+)$/, async ctx => {
         return;
     }
 
-    const token = await Token.findOne({
-        user_id: ctx.from.id,
-    });
+    const token = await Token.findOne({ user_id: ctx.from.id });
 
     if (!token) {
+        await ctx.answerCallbackQuery({ text: NOT_CONNECTED_TEXT });
+        return;
+    }
+
+    if (!ctx.chat) {
         await ctx.answerCallbackQuery({
-            text: 'You need to connect your GitHub account first.',
+            text: 'Unable to determine the chat.',
         });
         return;
     }
 
-    const secret = randomBytes(20).toString('hex');
+    const connected = await connectRepo(token.access_token, repo, ctx.chat.id);
 
-    const request = await fetch(`https://api.github.com/repos/${repo}/hooks`, {
-        method: 'POST',
-        headers: {
-            Accept: 'application/vnd.github.v3+json',
-            Authorization: `token ${token.access_token}`,
-        },
-        body: JSON.stringify({
-            name: 'web',
-            events: ['push', 'issues', 'issue_comment', 'pull_request'],
-            config: {
-                url: `${env.GITHUB_WEBHOOK_DOMAIN}/github/webhook/${base64(
-                    repo,
-                )}`,
-                content_type: 'json',
-                secret,
-            },
-        }),
-    });
-    const response = await request.json();
-
-    await new Hook({
-        chat_id: ctx.chat?.id,
-        hook_id: response.id,
-        secret,
-    }).save();
+    if (!connected) {
+        await ctx.answerCallbackQuery({
+            text: connectFailedText(repo),
+            show_alert: true,
+        });
+        return;
+    }
 
     await ctx.answerCallbackQuery();
-
-    const mention = ctx.from.username
-        ? `@${ctx.from.username}`
-        : `<a href="tg://user?id=${ctx.from.id}">${escapeHtml(
-              ctx.from.first_name,
-          )}</a>`;
-    await ctx.editMessageText(
-        `${mention} has connected <a href="https://github.com/${repo}">${repo}</a> to this chat.`,
-        { parse_mode: 'HTML' },
-    );
+    await ctx.editMessageText(connectedText(ctx.from, repo), {
+        parse_mode: 'HTML',
+    });
 });
 
 export default composer;
