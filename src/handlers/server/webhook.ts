@@ -31,7 +31,7 @@ export const handleWebhook = async (
 
                 await bot.api.sendMessage(hook.chat_id, message, {
                     parse_mode: 'HTML',
-                    disable_web_page_preview: true,
+                    link_preview_options: { is_disabled: true },
                 });
             }
 
@@ -55,7 +55,7 @@ export const handleWebhook = async (
 
                 await bot.api.sendMessage(hook.chat_id, message, {
                     parse_mode: 'HTML',
-                    disable_web_page_preview: true,
+                    link_preview_options: { is_disabled: true },
                 });
 
                 res.status(200).end('ok');
@@ -78,7 +78,7 @@ export const handleWebhook = async (
 
                 await bot.api.sendMessage(hook.chat_id, message, {
                     parse_mode: 'HTML',
-                    disable_web_page_preview: true,
+                    link_preview_options: { is_disabled: true },
                 });
 
                 res.status(200).end('ok');
@@ -108,7 +108,7 @@ export const handleWebhook = async (
 
                 await bot.api.sendMessage(hook.chat_id, message, {
                     parse_mode: 'HTML',
-                    disable_web_page_preview: true,
+                    link_preview_options: { is_disabled: true },
                 });
                 res.status(200).end('ok');
             } else {

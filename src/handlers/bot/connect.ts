@@ -1,5 +1,5 @@
 import { Composer, Context } from 'grammy';
-import { Chat } from '@grammyjs/types';
+import type { Chat } from 'grammy/types';
 import env from '../../env';
 import State from '../../models/state';
 
@@ -29,7 +29,7 @@ composer
             `Open <a href="https://github.com/login/oauth/authorize?client_id=${env.GITHUB_CLIENT_ID}&scope=admin:repo_hook,repo&state=${state.state}">this link</a> to connect your GitHub account.`,
             {
                 parse_mode: 'HTML',
-                disable_web_page_preview: true,
+                link_preview_options: { is_disabled: true },
             },
         );
     });

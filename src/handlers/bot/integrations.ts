@@ -1,6 +1,5 @@
 import { randomBytes } from 'crypto';
 import { Composer, InlineKeyboard } from 'grammy';
-import fetch from 'node-fetch';
 import escapeHtml from '@youtwitface/escape-html';
 import env from '../../env';
 import Hook from '../../models/hook';
@@ -16,8 +15,9 @@ composer.command('new', async ctx => {
         return;
     }
 
+    const userId = ctx.from.id;
     const token = await Token.findOne({
-        user_id: ctx.from.id,
+        user_id: userId,
     });
 
     if (!token) {
@@ -43,10 +43,7 @@ composer.command('new', async ctx => {
         .reduce(
             (keyboard, repo) =>
                 keyboard
-                    .text(
-                        repo.full_name,
-                        `repo:${ctx.from.id}:${repo.full_name}`,
-                    )
+                    .text(repo.full_name, `repo:${userId}:${repo.full_name}`)
                     .row(),
             new InlineKeyboard(),
         )

@@ -1,6 +1,5 @@
 import { Router, raw } from 'express';
 import State from '../../models/state';
-import fetch from 'node-fetch';
 import env from '../../env';
 import Token from '../../models/token';
 import bot from '../../bot';
@@ -61,10 +60,10 @@ router.get('/github/callback', async (req, res) => {
             token_type: response.token_type,
             access_token: response.access_token,
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
     );
 
-    await state.delete();
+    await state.deleteOne();
 
     const userRequest = await fetch('https://api.github.com/user', {
         headers: {
