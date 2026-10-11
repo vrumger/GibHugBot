@@ -8,6 +8,7 @@ export interface IHook extends Document {
     // Missing on hooks created before these fields were stored.
     repo?: string;
     user_id?: number;
+    topic_name?: string;
     createdAt: Date;
 }
 
@@ -34,6 +35,9 @@ const hookSchema = new Schema(
         },
         user_id: {
             type: Number,
+        },
+        topic_name: {
+            type: String,
         },
     },
     { timestamps: true },

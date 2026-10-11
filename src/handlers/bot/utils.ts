@@ -48,6 +48,7 @@ export const connectRepo = async (
     userId: number,
     chatId: number,
     threadId?: number,
+    topicName?: string,
 ) => {
     const secret = randomBytes(20).toString('hex');
 
@@ -66,6 +67,7 @@ export const connectRepo = async (
         secret,
         repo,
         user_id: userId,
+        topic_name: topicName,
     }).save();
     return true;
 };

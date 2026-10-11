@@ -27,6 +27,8 @@ Send `/integrations` in a chat to list the repositories connected to it. Pick a 
 
 Chat admins and the user who connected a repository can manage it. In private chats, you can manage all of them.
 
+Repositories connected to a topic are listed with the topic's name. Telegram doesn't let bots look up topics, so the bot learns a topic's name when it's created or renamed, or when the bot sees a message in it (such as `/new` or `/integrations`). Names are only stored for topics with connected repositories. Until the bot learns a name, the topic is shown by its ID.
+
 The bot registers its commands with Telegram when it starts, so they appear in the `/` menu. In groups, only admins see them.
 
 ## Self-hosting

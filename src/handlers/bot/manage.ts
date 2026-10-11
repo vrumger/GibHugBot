@@ -1,4 +1,5 @@
 import { Composer, Context, InlineKeyboard } from 'grammy';
+import escapeHtml from '@youtwitface/escape-html';
 import Hook, { IHook } from '../../models/hook';
 import { disconnectRepo, mentionUser, repoLink } from './utils';
 
@@ -11,10 +12,10 @@ const NOT_FOUND_TEXT = 'This integration no longer exists.';
 const hookName = (hook: IHook) =>
     hook.repo ?? `Unknown repository (hook ${hook.hook_id})`;
 
+const topicName = (hook: IHook) => hook.topic_name ?? `Topic ${hook.thread_id}`;
+
 const hookLabel = (hook: IHook) =>
-    hook.thread_id
-        ? `${hookName(hook)} · topic ${hook.thread_id}`
-        : hookName(hook);
+    hook.thread_id ? `${hookName(hook)} · ${topicName(hook)}` : hookName(hook);
 
 const hookTitle = (hook: IHook) =>
     hook.repo ? repoLink(hook.repo) : hookName(hook);
@@ -139,7 +140,7 @@ hookAction('', async (ctx, hook) => {
     const lines = [`<b>${hookTitle(hook)}</b>`];
 
     if (hook.thread_id) {
-        lines.push(`Topic: ${hook.thread_id}`);
+        lines.push(`Topic: ${escapeHtml(topicName(hook))}`);
     }
     if (hook.user_id) {
         lines.push(

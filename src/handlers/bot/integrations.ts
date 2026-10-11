@@ -3,6 +3,7 @@ import type { User } from 'grammy/types';
 import escapeHtml from '@youtwitface/escape-html';
 import { Repo, listRepos } from '../../github';
 import Token from '../../models/token';
+import { getTopicName } from './topics';
 import {
     connectRepo,
     getCachedRepos,
@@ -132,12 +133,14 @@ composer
             return;
         }
 
+        const threadId = getThreadId(ctx.msg);
         const connected = await connectRepo(
             token.access_token,
             repo,
             ctx.from.id,
             ctx.chat.id,
-            getThreadId(ctx.msg),
+            threadId,
+            getTopicName(ctx.chat.id, threadId),
         );
 
         await ctx.reply(
@@ -170,12 +173,14 @@ composer.callbackQuery(/^repo:(\d+):(.+)$/, async ctx => {
         return;
     }
 
+    const threadId = getThreadId(ctx.callbackQuery.message);
     const connected = await connectRepo(
         token.access_token,
         repo,
         ctx.from.id,
         ctx.chat.id,
-        getThreadId(ctx.callbackQuery.message),
+        threadId,
+        getTopicName(ctx.chat.id, threadId),
     );
 
     if (!connected) {
