@@ -27,6 +27,8 @@ Send `/integrations` in a chat to list the repositories connected to it. Pick a 
 
 Chat admins and the user who connected a repository can manage it. In private chats, you can manage all of them.
 
+The bot registers its commands with Telegram when it starts, so they appear in the `/` menu. In groups, only admins see them.
+
 ## Self-hosting
 
 ### Requirements
