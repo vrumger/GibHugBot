@@ -135,6 +135,7 @@ composer
         const connected = await connectRepo(
             token.access_token,
             repo,
+            ctx.from.id,
             ctx.chat.id,
             getThreadId(ctx.msg),
         );
@@ -172,6 +173,7 @@ composer.callbackQuery(/^repo:(\d+):(.+)$/, async ctx => {
     const connected = await connectRepo(
         token.access_token,
         repo,
+        ctx.from.id,
         ctx.chat.id,
         getThreadId(ctx.callbackQuery.message),
     );

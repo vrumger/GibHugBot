@@ -108,6 +108,13 @@ router.post(
         }
 
         const body = JSON.parse(req.body);
+
+        const repo = body.repository?.full_name;
+        if (typeof repo === 'string' && hook.repo !== repo) {
+            hook.repo = repo;
+            await hook.save();
+        }
+
         await handleWebhook(req, res, event, body, hook);
     },
 );

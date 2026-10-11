@@ -5,6 +5,10 @@ export interface IHook extends Document {
     thread_id?: number;
     hook_id: number;
     secret: string;
+    // Missing on hooks created before these fields were stored.
+    repo?: string;
+    user_id?: number;
+    createdAt: Date;
 }
 
 const hookSchema = new Schema(
@@ -24,6 +28,12 @@ const hookSchema = new Schema(
         secret: {
             type: String,
             required: true,
+        },
+        repo: {
+            type: String,
+        },
+        user_id: {
+            type: Number,
         },
     },
     { timestamps: true },

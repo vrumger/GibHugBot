@@ -1,8 +1,15 @@
 import { randomBytes } from 'crypto';
 import type { User } from 'grammy/types';
 import escapeHtml from '@youtwitface/escape-html';
-import { Repo, createWebhook, listAllRepos } from '../../github';
-import Hook from '../../models/hook';
+import {
+    GitHubError,
+    Repo,
+    createWebhook,
+    deleteWebhook,
+    listAllRepos,
+} from '../../github';
+import Hook, { IHook } from '../../models/hook';
+import Token from '../../models/token';
 
 const REPOS_CACHE_TTL = 60 * 1000;
 const REPOS_MAX_PAGES = 10;
@@ -38,6 +45,7 @@ export const getCachedRepos = async (userId: number, accessToken: string) => {
 export const connectRepo = async (
     accessToken: string,
     repo: string,
+    userId: number,
     chatId: number,
     threadId?: number,
 ) => {
@@ -56,6 +64,50 @@ export const connectRepo = async (
         thread_id: threadId,
         hook_id: hookId,
         secret,
+        repo,
+        user_id: userId,
     }).save();
     return true;
+};
+
+/**
+ * Removes the hook from the chat and tries to delete its GitHub webhook, first
+ * with the token of the user who connected it, then with the remover's token.
+ * Returns whether the webhook is gone from GitHub.
+ */
+export const disconnectRepo = async (hook: IHook, removerId: number) => {
+    let deletedOnGitHub = false;
+
+    if (hook.repo) {
+        const userIds = [...new Set([hook.user_id, removerId])].filter(
+            (id): id is number => id !== undefined,
+        );
+
+        for (const userId of userIds) {
+            const token = await Token.findOne({ user_id: userId });
+            if (!token) {
+                continue;
+            }
+
+            try {
+                await deleteWebhook(
+                    token.access_token,
+                    hook.repo,
+                    hook.hook_id,
+                );
+                deletedOnGitHub = true;
+                break;
+            } catch (error) {
+                // GitHub also returns 404 when the token can't see the repo, so keep trying.
+                if (error instanceof GitHubError && error.status === 404) {
+                    deletedOnGitHub = true;
+                } else {
+                    console.error(error);
+                }
+            }
+        }
+    }
+
+    await hook.deleteOne();
+    return deletedOnGitHub;
 };

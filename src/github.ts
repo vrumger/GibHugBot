@@ -13,6 +13,16 @@ interface Webhook {
     id: number;
 }
 
+export class GitHubError extends Error {
+    constructor(
+        path: string,
+        public readonly status: number,
+        statusText: string,
+    ) {
+        super(`GitHub request to ${path} failed: ${status} ${statusText}`);
+    }
+}
+
 const base64 = (data: string) =>
     Buffer.from(data).toString('base64').replace(/=+$/, '');
 
@@ -30,9 +40,11 @@ const request = async <T>(
     });
 
     if (!response.ok) {
-        throw new Error(
-            `GitHub request to ${path} failed: ${response.status} ${response.statusText}`,
-        );
+        throw new GitHubError(path, response.status, response.statusText);
+    }
+
+    if (response.status === 204) {
+        return undefined as T;
     }
 
     return response.json() as Promise<T>;
@@ -75,4 +87,13 @@ export const createWebhook = (
                 secret,
             },
         }),
+    });
+
+export const deleteWebhook = (
+    accessToken: string,
+    repo: string,
+    hookId: number,
+) =>
+    request<void>(accessToken, `/repos/${repo}/hooks/${hookId}`, {
+        method: 'DELETE',
     });

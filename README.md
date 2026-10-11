@@ -21,6 +21,12 @@ In groups with topics enabled, connect the repository from inside a topic and it
 
 You need admin access to a repository to connect it, because the bot creates a webhook on it.
 
+### Managing integrations
+
+Send `/integrations` in a chat to list the repositories connected to it. Pick a repository to see its details, or remove it. Removing a repository stops its notifications and deletes its webhook from GitHub.
+
+Chat admins and the user who connected a repository can manage it. In private chats, you can manage all of them.
+
 ## Self-hosting
 
 ### Requirements
