@@ -3,7 +3,13 @@ import { Request, Response } from 'express';
 import { GrammyError } from 'grammy';
 import bot from '../../bot';
 import { IHook } from '../../models/hook';
-import { captionLinkedImages, removeMedia } from '../../markdown';
+import { autolink } from '../../autolink';
+import {
+    captionLinkedImages,
+    escapeHashtags,
+    linkReferences,
+    removeMedia,
+} from '../../markdown';
 
 // Telegram's limit is 32768 characters for the whole rich message.
 const MAX_RICH_BODY_LENGTH = 30000;
@@ -25,17 +31,23 @@ const sendRichMessage = async (
     hook: IHook,
     header: string,
     body: string,
+    repo: string,
     fallbackHtml: string,
 ) => {
     const bodies = [
         ...new Set([captionLinkedImages(body), removeMedia(body)]),
-    ];
+    ].map(body => escapeHashtags(linkReferences(body, repo)));
 
     for (const [index, markdownBody] of bodies.entries()) {
         try {
             await bot.api.sendRichMessage(
                 hook.chat_id,
-                { markdown: `${header}${markdownBody}` },
+                // GitHub references are already linked, and Telegram would
+                // otherwise turn the rest of them into Telegram searches.
+                {
+                    markdown: `${header}${markdownBody}`,
+                    skip_entity_detection: true,
+                },
                 { message_thread_id: hook.thread_id },
             );
             return;
@@ -96,6 +108,7 @@ const formatHtmlMessage = (
     url: string,
     user: { login: string; html_url: string },
     body: string | null | undefined,
+    repo: string,
     emptyBody = '',
 ) => {
     const head = `<b>${header} <a href="${url}">${escapeHtml(
@@ -108,8 +121,10 @@ const formatHtmlMessage = (
         return `${head}${emptyBody}`;
     }
 
-    return `${head}${escapeHtml(
+    return `${head}${autolink(
         truncateText(body, MAX_MESSAGE_LENGTH - visibleLength(head)),
+        repo,
+        escapeHtml,
     )}`;
 };
 
@@ -122,8 +137,10 @@ const formatPushMessage = (body: any) => {
     )}:</b>\n\n`;
     const lines = commits.map(
         commit =>
-            `<a href="${commit.url}">${commit.id.slice(0, 8)}</a>: ${escapeHtml(
+            `<a href="${commit.url}">${commit.id.slice(0, 8)}</a>: ${autolink(
                 truncateText(commit.message, MAX_COMMIT_MESSAGE_LENGTH),
+                body.repository.full_name,
+                escapeHtml,
             )} by ${escapeHtml(commit.author.name)}`,
     );
 
@@ -199,10 +216,17 @@ export const handleWebhook = async (
                     body.issue.html_url,
                     body.issue.user,
                     body.issue.body,
+                    body.repository.full_name,
                     '<i>No description provided.</i>',
                 );
 
-                await sendRichMessage(hook, header, markdownBody, html);
+                await sendRichMessage(
+                    hook,
+                    header,
+                    markdownBody,
+                    body.repository.full_name,
+                    html,
+                );
 
                 res.status(200).end('ok');
             } else {
@@ -231,9 +255,16 @@ export const handleWebhook = async (
                     body.comment.html_url,
                     body.comment.user,
                     body.comment.body,
+                    body.repository.full_name,
                 );
 
-                await sendRichMessage(hook, header, markdownBody, html);
+                await sendRichMessage(
+                    hook,
+                    header,
+                    markdownBody,
+                    body.repository.full_name,
+                    html,
+                );
 
                 res.status(200).end('ok');
             } else {
@@ -264,10 +295,17 @@ export const handleWebhook = async (
                     body.pull_request.html_url,
                     body.pull_request.user,
                     body.pull_request.body,
+                    body.repository.full_name,
                     '<i>No description provided.</i>',
                 );
 
-                await sendRichMessage(hook, header, markdownBody, html);
+                await sendRichMessage(
+                    hook,
+                    header,
+                    markdownBody,
+                    body.repository.full_name,
+                    html,
+                );
                 res.status(200).end('ok');
             } else {
                 res.status(200).end(

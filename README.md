@@ -13,6 +13,8 @@ Connect your GitHub account, pick a repository, and the bot sets up a webhook th
 
 Issue, comment, and pull request bodies are sent as Telegram [rich messages](https://core.telegram.org/bots/api#rich-messages), so their Markdown formatting (headings, lists, task lists, tables, code blocks, quotes, images, and more) is kept. Images wrapped in a link show the link in their caption, since Telegram doesn't support linked images. Telegram rejects a rich message if it can't fetch one of its images, so the bot then retries with the images shown as links. If Telegram still rejects the formatting, the bot sends the body as plain text instead.
 
+Mentions (`@user`, `@org/team`), issue and pull request references (`#123`, `GH-123`, `owner/repo#123`), commit SHAs, URLs, and e-mail addresses link to GitHub, like they do on GitHub, instead of searching Telegram. This also applies to commit messages. Telegram can only stop detecting other hashtags, mentions, and commands in rich messages, so in commit messages and plain-text fallbacks other `#words` still search Telegram.
+
 ## Usage
 
 1. Send `/start` to the bot in a private chat and open the link to authorize it with GitHub.

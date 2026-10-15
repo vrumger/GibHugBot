@@ -1,3 +1,5 @@
+import { autolink } from './autolink';
+
 const FENCE = /^[\s>]*(`{3,}|~{3,})/;
 const BLANK_LINE = /[ \t>]*\r?\n/y;
 const MEDIA_TAG = /^<(img|video|audio)\b[^>]*>/i;
@@ -475,3 +477,133 @@ export const captionLinkedImages = (markdown: string) => {
         captionInlineLinkedImages(text, references),
     );
 };
+
+const REFERENCE_DEFINITION_LINE = new RegExp(REFERENCE_DEFINITION.source, 'i');
+const HTML_TAG =
+    /^(?:<!--[\s\S]*?-->|<\/?[a-z][\w-]*(?:\s[^>]*)?\/?>|<[a-z][\w+.-]{1,31}:[^\s<>]*>|<[^\s<>@]+@[^\s<>]+>)/i;
+// Tags whose content is copied as is.
+const LITERAL_TAG = /^<(a|code|pre|kbd|samp|tg-math|tg-math-block)\b[^>]*>/i;
+
+// Returns the index after the link or image whose label starts at `start`.
+const linkEnd = (
+    text: string,
+    start: number,
+    references: Map<string, Destination>,
+) => {
+    const labelEnd = findClosing(text, start);
+    if (labelEnd === -1) {
+        return -1;
+    }
+
+    if (/[([]/.test(text[labelEnd + 1] ?? '')) {
+        const end = findClosing(text, labelEnd + 1);
+        if (end !== -1) {
+            return end + 1;
+        }
+    }
+
+    return references.has(normalizeLabel(text.slice(start + 1, labelEnd)))
+        ? labelEnd + 1
+        : -1;
+};
+
+const linkInlineReferences = (
+    text: string,
+    repo: string,
+    references: Map<string, Destination>,
+) => {
+    // Tags with no closing tag after the current position.
+    const unclosed = new Set<string>();
+    let result = '';
+    let plain = '';
+    let i = 0;
+
+    const copy = (end: number) => {
+        result += autolink(plain, repo) + text.slice(i, end);
+        plain = '';
+        i = end;
+    };
+
+    while (i < text.length) {
+        if (i === 0 || text[i - 1] === '\n') {
+            const lineEnd = text.indexOf('\n', i);
+            const line = text.slice(i, lineEnd === -1 ? undefined : lineEnd);
+            if (REFERENCE_DEFINITION_LINE.test(line)) {
+                copy(i + line.length);
+                continue;
+            }
+        }
+
+        const rest = text.slice(i, i + MAX_BRACKET_LENGTH);
+
+        if (rest[0] === '\\') {
+            copy(i + 2);
+            continue;
+        }
+
+        if (rest[0] === '`') {
+            copy(codeSpanEnd(text, i));
+            continue;
+        }
+
+        if (rest[0] === '<') {
+            const literal = rest.match(LITERAL_TAG);
+            if (literal) {
+                const name = literal[1].toLowerCase();
+                const closing = new RegExp(`</${name}\\s*>`, 'gi');
+                closing.lastIndex = i + literal[0].length;
+                const match = unclosed.has(name) ? null : closing.exec(text);
+
+                if (!match) {
+                    unclosed.add(name);
+                }
+
+                copy(
+                    match
+                        ? match.index + match[0].length
+                        : i + literal[0].length,
+                );
+                continue;
+            }
+
+            const tag = rest.match(HTML_TAG);
+            if (tag) {
+                copy(i + tag[0].length);
+                continue;
+            }
+        }
+
+        if (rest[0] === '[' || rest.startsWith('![')) {
+            const end = linkEnd(text, rest[0] === '!' ? i + 1 : i, references);
+            if (end !== -1) {
+                copy(end);
+                continue;
+            }
+        }
+
+        plain += rest[0];
+        i++;
+    }
+
+    return result + autolink(plain, repo);
+};
+
+// GitHub links mentions, issue and commit references, and plain URLs. Telegram
+// would search for mentions and hashtags in Telegram instead, so they're turned
+// into explicit links to GitHub.
+export const linkReferences = (markdown: string, repo: string) => {
+    const references = getReferences(markdown);
+    return mapText(markdown, text =>
+        linkInlineReferences(text, repo, references),
+    );
+};
+
+// A `#` at the start of a line, after any list or blockquote markers, that
+// isn't followed by a space. Lines indented as code are skipped.
+const HASHTAG_LINE =
+    /^((?: {0,3}|[ \t]*(?=>|[-*+][ \t]|\d{1,9}[.)][ \t]))(?:(?:>|[-*+][ \t]|\d{1,9}[.)][ \t])[ \t]*)*)(?=#+[^\s#])/gm;
+
+// Unlike GitHub, Telegram shows a line starting with `#word` as a heading, so
+// the `#` is escaped.
+export const escapeHashtags = (markdown: string) =>
+    mapText(markdown, text => text.replace(HASHTAG_LINE, '$1\\'));
