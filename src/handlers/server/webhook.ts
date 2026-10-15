@@ -1,7 +1,15 @@
 import escapeHtml from '@youtwitface/escape-html';
 import { Request, Response } from 'express';
+import { GrammyError } from 'grammy';
 import bot from '../../bot';
 import { IHook } from '../../models/hook';
+import { captionLinkedImages, removeMedia } from '../../markdown';
+
+// Telegram's limit is 32768 characters for the whole rich message.
+const MAX_RICH_BODY_LENGTH = 30000;
+// Telegram's limit for regular messages, counted after entity parsing.
+const MAX_MESSAGE_LENGTH = 4096;
+const MAX_COMMIT_MESSAGE_LENGTH = 1024;
 
 const sendMessage = (hook: IHook, message: string) =>
     bot.api.sendMessage(hook.chat_id, message, {
@@ -9,6 +17,151 @@ const sendMessage = (hook: IHook, message: string) =>
         parse_mode: 'HTML',
         link_preview_options: { is_disabled: true },
     });
+
+// GitHub bodies are arbitrary Markdown that Telegram may reject. Most often
+// it's media Telegram can't fetch, so retry with media turned into links before
+// falling back to a plain HTML message.
+const sendRichMessage = async (
+    hook: IHook,
+    header: string,
+    body: string,
+    fallbackHtml: string,
+) => {
+    const bodies = [
+        ...new Set([captionLinkedImages(body), removeMedia(body)]),
+    ];
+
+    for (const [index, markdownBody] of bodies.entries()) {
+        try {
+            await bot.api.sendRichMessage(
+                hook.chat_id,
+                { markdown: `${header}${markdownBody}` },
+                { message_thread_id: hook.thread_id },
+            );
+            return;
+        } catch (err) {
+            if (!(err instanceof GrammyError) || err.error_code !== 400) {
+                throw err;
+            }
+
+            console.error(
+                `Failed to send rich message, ${
+                    index < bodies.length - 1
+                        ? 'retrying without media'
+                        : 'falling back to HTML'
+                }: ${err.description}`,
+            );
+        }
+    }
+
+    await sendMessage(hook, fallbackHtml);
+};
+
+const escapeMarkdown = (text: string) =>
+    text.replace(/[!-/:-@[-`{-~]/g, '\\$&');
+
+const truncate = (text: string, length: number) => {
+    const chars = Array.from(text);
+    return chars.length > length
+        ? `${chars.slice(0, length).join('')}…`
+        : text;
+};
+
+// Uses UTF-16 length, which is never less than the number of characters
+// Telegram counts.
+const visibleLength = (html: string) =>
+    html.replace(/<[^>]*>/g, '').replace(/&(?:#\d+|#x[\da-f]+|\w+);/gi, '_')
+        .length;
+
+const truncateText = (text: string, length: number) => {
+    if (text.length <= length) {
+        return text;
+    }
+
+    if (length < 1) {
+        return '';
+    }
+
+    let end = length - 1;
+    if (/[\uD800-\uDBFF]/.test(text.charAt(end - 1))) {
+        end--;
+    }
+
+    return `${text.slice(0, end)}…`;
+};
+
+const formatHtmlMessage = (
+    header: string,
+    title: string,
+    url: string,
+    user: { login: string; html_url: string },
+    body: string | null | undefined,
+    emptyBody = '',
+) => {
+    const head = `<b>${header} <a href="${url}">${escapeHtml(
+        title,
+    )}</a></b>\nby <a href="${user.html_url}">@${escapeHtml(
+        user.login,
+    )}</a>\n\n`;
+
+    if (!body) {
+        return `${head}${emptyBody}`;
+    }
+
+    return `${head}${escapeHtml(
+        truncateText(body, MAX_MESSAGE_LENGTH - visibleLength(head)),
+    )}`;
+};
+
+const formatPushMessage = (body: any) => {
+    const commits: any[] = body.commits;
+    const header = `🔨 <b><a href="${body.compare}">${commits.length} new commit${
+        commits.length === 1 ? '' : 's'
+    }</a> to ${escapeHtml(body.repository.name)}:${escapeHtml(
+        body.ref.split('/')[2],
+    )}:</b>\n\n`;
+    const lines = commits.map(
+        commit =>
+            `<a href="${commit.url}">${commit.id.slice(0, 8)}</a>: ${escapeHtml(
+                truncateText(commit.message, MAX_COMMIT_MESSAGE_LENGTH),
+            )} by ${escapeHtml(commit.author.name)}`,
+    );
+
+    const message = `${header}${lines.join('\n')}`;
+    if (visibleLength(message) <= MAX_MESSAGE_LENGTH) {
+        return message;
+    }
+
+    // Leave room for the "…and N more commits" line.
+    const limit = MAX_MESSAGE_LENGTH - 50;
+    let length = visibleLength(header);
+    let included = 0;
+
+    for (const line of lines) {
+        const lineLength = visibleLength(line) + (included > 0 ? 1 : 0);
+        if (length + lineLength > limit) {
+            break;
+        }
+
+        length += lineLength;
+        included++;
+    }
+
+    const remaining = commits.length - included;
+    return `${header}${lines.slice(0, included).join('\n')}${
+        included > 0 ? '\n' : ''
+    }<i>…and ${remaining} more commit${remaining === 1 ? '' : 's'}</i>`;
+};
+
+const formatRichHeader = (
+    header: string,
+    title: string,
+    url: string,
+    user: { login: string; html_url: string },
+) =>
+    `**${header} [${escapeMarkdown(title)}](<${url}>)**\\\nby [@${escapeMarkdown(
+        user.login,
+    )}](<${user.html_url}>)\n\n`;
 
 export const handleWebhook = async (
     req: Request<{ repo: string }>,
@@ -20,23 +173,7 @@ export const handleWebhook = async (
     switch (event) {
         case 'push': {
             if (body.commits.length > 0) {
-                const message = `🔨 <b><a href="${body.compare}">${
-                    body.commits.length
-                } new commit${body.commits.length === 1 ? '' : 's'}</a> to ${
-                    body.repository.name
-                }:${body.ref.split('/')[2]}:</b>\n\n${body.commits
-                    .map(
-                        (commit: any) =>
-                            `<a href="${commit.url}">${commit.id.slice(
-                                0,
-                                8,
-                            )}</a>: ${escapeHtml(
-                                commit.message,
-                            )} by ${escapeHtml(commit.author.name)}`,
-                    )
-                    .join('\n')}`;
-
-                await sendMessage(hook, message);
+                await sendMessage(hook, formatPushMessage(body));
             }
 
             res.status(200).end('ok');
@@ -45,19 +182,27 @@ export const handleWebhook = async (
 
         case 'issues': {
             if (body.action === 'opened') {
-                const message = `<b>🐛 New issue <a href="${
-                    body.issue.html_url
-                }">${body.repository.name}#${body.issue.number} ${escapeHtml(
-                    body.issue.title,
-                )}</a></b>\nby <a href="${body.issue.user.html_url}">@${
-                    body.issue.user.login
-                }</a>\n\n${
-                    body.issue.body
-                        ? escapeHtml(body.issue.body)
-                        : '<i>No description provided.</i>'
-                }`;
+                const title = `${body.repository.name}#${body.issue.number} ${body.issue.title}`;
+                const header = formatRichHeader(
+                    '🐛 New issue',
+                    title,
+                    body.issue.html_url,
+                    body.issue.user,
+                );
+                const markdownBody = truncate(
+                    body.issue.body || '_No description provided._',
+                    MAX_RICH_BODY_LENGTH,
+                );
+                const html = formatHtmlMessage(
+                    '🐛 New issue',
+                    title,
+                    body.issue.html_url,
+                    body.issue.user,
+                    body.issue.body,
+                    '<i>No description provided.</i>',
+                );
 
-                await sendMessage(hook, message);
+                await sendRichMessage(hook, header, markdownBody, html);
 
                 res.status(200).end('ok');
             } else {
@@ -69,15 +214,26 @@ export const handleWebhook = async (
 
         case 'issue_comment': {
             if (body.action === 'created') {
-                const message = `<b>💬 New comment on <a href="${
-                    body.comment.html_url
-                }">${body.repository.name}#${body.issue.number} ${escapeHtml(
-                    body.issue.title,
-                )}</a></b>\nby <a href="${body.comment.user.html_url}">@${
-                    body.comment.user.login
-                }</a>\n\n${escapeHtml(body.comment.body ?? '')}`;
+                const title = `${body.repository.name}#${body.issue.number} ${body.issue.title}`;
+                const header = formatRichHeader(
+                    '💬 New comment on',
+                    title,
+                    body.comment.html_url,
+                    body.comment.user,
+                );
+                const markdownBody = truncate(
+                    body.comment.body ?? '',
+                    MAX_RICH_BODY_LENGTH,
+                );
+                const html = formatHtmlMessage(
+                    '💬 New comment on',
+                    title,
+                    body.comment.html_url,
+                    body.comment.user,
+                    body.comment.body,
+                );
 
-                await sendMessage(hook, message);
+                await sendRichMessage(hook, header, markdownBody, html);
 
                 res.status(200).end('ok');
             } else {
@@ -91,20 +247,27 @@ export const handleWebhook = async (
 
         case 'pull_request': {
             if (body.action === 'opened') {
-                // 🔌 New pull request test#2 Update test (https://github.com/AndrewLaneX/test/pull/2)
-                const message = `<b>🔌 New pull request <a href="${
-                    body.pull_request.html_url
-                }">${body.repository.name}#${
-                    body.pull_request.number
-                } ${escapeHtml(body.pull_request.title)}</a></b>\nby <a href="${
-                    body.pull_request.user.html_url
-                }">@${body.pull_request.user.login}</a>\n\n${
-                    body.pull_request.body
-                        ? escapeHtml(body.pull_request.body)
-                        : '<i>No description provided.</i>'
-                }`;
+                const title = `${body.repository.name}#${body.pull_request.number} ${body.pull_request.title}`;
+                const header = formatRichHeader(
+                    '🔌 New pull request',
+                    title,
+                    body.pull_request.html_url,
+                    body.pull_request.user,
+                );
+                const markdownBody = truncate(
+                    body.pull_request.body || '_No description provided._',
+                    MAX_RICH_BODY_LENGTH,
+                );
+                const html = formatHtmlMessage(
+                    '🔌 New pull request',
+                    title,
+                    body.pull_request.html_url,
+                    body.pull_request.user,
+                    body.pull_request.body,
+                    '<i>No description provided.</i>',
+                );
 
-                await sendMessage(hook, message);
+                await sendRichMessage(hook, header, markdownBody, html);
                 res.status(200).end('ok');
             } else {
                 res.status(200).end(
