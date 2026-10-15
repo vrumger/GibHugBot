@@ -133,7 +133,7 @@ const formatPushMessage = (body: any) => {
     const header = `🔨 <b><a href="${body.compare}">${commits.length} new commit${
         commits.length === 1 ? '' : 's'
     }</a> to ${escapeHtml(body.repository.name)}:${escapeHtml(
-        body.ref.split('/')[2],
+        body.ref.replace(/^refs\/[^/]+\//, ''),
     )}:</b>\n\n`;
     const lines = commits.map(
         commit =>
