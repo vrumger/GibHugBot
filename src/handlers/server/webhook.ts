@@ -74,9 +74,7 @@ const escapeMarkdown = (text: string) =>
 
 const truncate = (text: string, length: number) => {
     const chars = Array.from(text);
-    return chars.length > length
-        ? `${chars.slice(0, length).join('')}…`
-        : text;
+    return chars.length > length ? `${chars.slice(0, length).join('')}…` : text;
 };
 
 // Uses UTF-16 length, which is never less than the number of characters
@@ -170,15 +168,26 @@ const formatPushMessage = (body: any) => {
     }<i>…and ${remaining} more commit${remaining === 1 ? '' : 's'}</i>`;
 };
 
+// Telegram doesn't support `<url>` link destinations, so encode the characters
+// that would otherwise end the destination early.
+const escapeUrl = (url: string) =>
+    url.replace(
+        /[\s()<>]/g,
+        char =>
+            `%${char.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`,
+    );
+
 const formatRichHeader = (
     header: string,
     title: string,
     url: string,
     user: { login: string; html_url: string },
 ) =>
-    `**${header} [${escapeMarkdown(title)}](<${url}>)**\\\nby [@${escapeMarkdown(
-        user.login,
-    )}](<${user.html_url}>)\n\n`;
+    `**${header} [${escapeMarkdown(title)}](${escapeUrl(
+        url,
+    )})**\\\nby [@${escapeMarkdown(user.login)}](${escapeUrl(
+        user.html_url,
+    )})\n\n`;
 
 export const handleWebhook = async (
     req: Request<{ repo: string }>,

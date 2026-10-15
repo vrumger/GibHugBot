@@ -11,7 +11,10 @@ const MAX_BRACKET_LENGTH = 2000;
 
 const getAttribute = (tag: string, name: string) => {
     const match = tag.match(
-        new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'),
+        new RegExp(
+            `\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+            'i',
+        ),
     );
     return match?.slice(1).find(value => value !== undefined);
 };
