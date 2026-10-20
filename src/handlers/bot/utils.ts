@@ -1,6 +1,8 @@
-import { randomBytes } from 'crypto';
-import type { User } from 'grammy/types';
 import escapeHtml from '@youtwitface/escape-html';
+import { randomBytes } from 'crypto';
+import { Api } from 'grammy';
+import type { User } from 'grammy/types';
+import env from '../../env';
 import {
     GitHubError,
     Repo,
@@ -72,11 +74,6 @@ export const connectRepo = async (
     return true;
 };
 
-/**
- * Removes the hook from the chat and tries to delete its GitHub webhook, first
- * with the token of the user who connected it, then with the remover's token.
- * Returns whether the webhook is gone from GitHub.
- */
 export const disconnectRepo = async (hook: IHook, removerId: number) => {
     let deletedOnGitHub = false;
 
@@ -112,4 +109,29 @@ export const disconnectRepo = async (hook: IHook, removerId: number) => {
 
     await hook.deleteOne();
     return deletedOnGitHub;
+};
+
+export const downloadText = async (api: Api, fileId: string) => {
+    const { file_path } = await api.getFile(fileId);
+    if (!file_path) {
+        throw new Error('File path is missing');
+    }
+
+    const response = await fetch(
+        `https://api.telegram.org/file/bot${env.BOT_TOKEN}/${file_path}`,
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Failed to download file: ${response.status} ${response.statusText}`,
+        );
+    }
+
+    return response.text();
+};
+
+export const formatList = (items: string[], maxItems: number) => {
+    const listed = items.slice(0, maxItems).join(', ');
+    const more = items.length - maxItems;
+    return more > 0 ? `${listed} and ${more} more` : listed;
 };

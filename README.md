@@ -35,6 +35,14 @@ Repositories connected to a topic are listed with the topic's name. Telegram doe
 
 The bot registers its commands with Telegram when it starts, so they appear in the `/` menu. In groups, only admins see them.
 
+### Copying integrations to another chat
+
+Send `/export` in a chat to get an `/import` command that lists its connected repositories. Copy it and send it in another chat (or topic) to connect the same repositories there. You can edit the list before sending it, or write your own: `/import` accepts repository names (`owner/repo`) or GitHub URLs, separated by spaces, commas, or new lines. You can also reply with `/import` to a message that contains a list.
+
+If the list is too long for one message, `/export` sends it as a `repositories.txt` file instead. Forward the file to the other chat and reply to it with `/import`.
+
+Importing creates a new webhook for each repository with your GitHub account, like `/new`, so you need admin access to them. Repositories are connected to the topic where you send `/import`, and repositories already connected to that topic are skipped.
+
 ## Self-hosting
 
 ### Requirements

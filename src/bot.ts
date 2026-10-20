@@ -20,6 +20,14 @@ const groupCommands = [
         command: 'integrations',
         description: 'Manage repositories connected to this chat',
     },
+    {
+        command: 'export',
+        description: 'Export the repositories connected to this chat',
+    },
+    {
+        command: 'import',
+        description: 'Connect repositories exported from another chat',
+    },
 ];
 
 // Group commands are only shown to admins, since they manage the chat's integrations.
