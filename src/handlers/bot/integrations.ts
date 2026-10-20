@@ -5,10 +5,13 @@ import { Repo, listRepos } from '../../github';
 import Token from '../../models/token';
 import { getTopicName } from './topics';
 import {
+    adminOnly,
     connectRepo,
     getCachedRepos,
     getThreadId,
+    isAdmin,
     mentionUser,
+    NOT_ADMIN_TEXT,
     repoLink,
 } from './utils';
 
@@ -29,7 +32,7 @@ const connectFailedText = (repo: string) =>
 
 const composer = new Composer();
 
-composer.command('new', async ctx => {
+composer.command('new', adminOnly, async ctx => {
     if (!ctx.from) {
         return;
     }
@@ -118,7 +121,7 @@ composer
             !ctx.msg.forward_origin &&
             CONNECT_MESSAGE_REGEX.test(ctx.msg.text),
     )
-    .use(async ctx => {
+    .use(adminOnly, async ctx => {
         const [, repo] = ctx.msg.text.match(CONNECT_MESSAGE_REGEX)!;
         const replyOptions = {
             parse_mode: 'HTML',
@@ -156,6 +159,14 @@ composer.callbackQuery(/^repo:(\d+):(.+)$/, async ctx => {
 
     if (ctx.from.id !== Number(userId)) {
         await ctx.answerCallbackQuery({ text: "This isn't for you" });
+        return;
+    }
+
+    if (!(await isAdmin(ctx))) {
+        await ctx.answerCallbackQuery({
+            text: NOT_ADMIN_TEXT,
+            show_alert: true,
+        });
         return;
     }
 

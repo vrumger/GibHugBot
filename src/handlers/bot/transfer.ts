@@ -5,6 +5,7 @@ import Hook from '../../models/hook';
 import Token from '../../models/token';
 import { getTopicName } from './topics';
 import {
+    adminOnly,
     connectRepo,
     downloadText,
     formatList,
@@ -70,7 +71,7 @@ const formatRepos = (repos: string[]) =>
 
 const composer = new Composer();
 
-composer.command('export', async ctx => {
+composer.command('export', adminOnly, async ctx => {
     const hooks = await Hook.find({ chat_id: ctx.chat.id }).sort({
         createdAt: 1,
         _id: 1,
@@ -147,7 +148,7 @@ const getImportRepos = async (
 composer
     .command('import')
     .filter(ctx => !ctx.msg.forward_origin)
-    .use(async ctx => {
+    .use(adminOnly, async ctx => {
         const replyOptions = {
             ...htmlOptions,
             reply_parameters: { message_id: ctx.msg.message_id },

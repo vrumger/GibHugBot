@@ -25,11 +25,13 @@ In groups with topics enabled, connect the repository from inside a topic and it
 
 You need admin access to a repository to connect it, because the bot creates a webhook on it.
 
+In groups, only chat admins can use the bot's commands (`/new`, `/integrations`, `/export`, `/import`) and connect repositories with inline mode.
+
 ### Managing integrations
 
 Send `/integrations` in a chat to list the repositories connected to it. Pick a repository to see its details, or remove it. Removing a repository stops its notifications and deletes its webhook from GitHub.
 
-Chat admins and the user who connected a repository can manage it. In private chats, you can manage all of them.
+In groups, only chat admins can manage integrations. In private chats, you can manage all of them.
 
 Repositories connected to a topic are listed with the topic's name. Telegram doesn't let bots look up topics, so the bot learns a topic's name when it's created or renamed, or when the bot sees a message in it (such as `/new` or `/integrations`). Names are only stored for topics with connected repositories. Until the bot learns a name, the topic is shown by its ID.
 

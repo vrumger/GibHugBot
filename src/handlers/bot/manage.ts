@@ -1,12 +1,17 @@
 import { Composer, Context, InlineKeyboard } from 'grammy';
 import escapeHtml from '@youtwitface/escape-html';
 import Hook, { IHook } from '../../models/hook';
-import { disconnectRepo, mentionUser, repoLink } from './utils';
+import {
+    adminOnly,
+    disconnectRepo,
+    isAdmin,
+    mentionUser,
+    NOT_ADMIN_TEXT,
+    repoLink,
+} from './utils';
 
 const NO_INTEGRATIONS_TEXT =
     'No repositories are connected to this chat. Use /new to connect one.';
-const NOT_ALLOWED_TEXT =
-    'Only chat admins and the user who connected this repository can manage it.';
 const NOT_FOUND_TEXT = 'This integration no longer exists.';
 
 const PAGE_SIZE = 8;
@@ -67,24 +72,6 @@ const buildList = async (chatId: number, page = 0, notice?: string) => {
     };
 };
 
-const canManage = async (ctx: Context, hook: IHook) => {
-    if (!ctx.chat || !ctx.from) {
-        return false;
-    }
-
-    if (ctx.chat.type === 'private' || hook.user_id === ctx.from.id) {
-        return true;
-    }
-
-    try {
-        const member = await ctx.getChatMember(ctx.from.id);
-        return member.status === 'creator' || member.status === 'administrator';
-    } catch (error) {
-        console.error(error);
-        return false;
-    }
-};
-
 const describeConnector = async (ctx: Context, userId: number) => {
     try {
         const member = await ctx.getChatMember(userId);
@@ -101,33 +88,35 @@ const editOptions = {
 
 const composer = new Composer();
 
-composer.command('integrations', async ctx => {
+composer.command('integrations', adminOnly, async ctx => {
     const { text, reply_markup } = await buildList(ctx.chat.id);
     await ctx.reply(text, { ...editOptions, reply_markup });
 });
 
-composer.callbackQuery(/^integrations:list(?::(\d+))?$/, async ctx => {
-    if (!ctx.chat) {
-        return ctx.answerCallbackQuery();
-    }
+composer.callbackQuery(
+    /^integrations:list(?::(\d+))?$/,
+    adminOnly,
+    async ctx => {
+        if (!ctx.chat) {
+            return ctx.answerCallbackQuery();
+        }
 
-    const { text, reply_markup } = await buildList(
-        ctx.chat.id,
-        Number(ctx.match![1] ?? 0),
-    );
-    await ctx.answerCallbackQuery();
-    await ctx.editMessageText(text, { ...editOptions, reply_markup });
-});
+        const { text, reply_markup } = await buildList(
+            ctx.chat.id,
+            Number(ctx.match![1] ?? 0),
+        );
+        await ctx.answerCallbackQuery();
+        await ctx.editMessageText(text, { ...editOptions, reply_markup });
+    },
+);
 
 composer.callbackQuery('integrations:noop', ctx => ctx.answerCallbackQuery());
 
-composer.callbackQuery('integrations:close', async ctx => {
+composer.callbackQuery('integrations:close', adminOnly, async ctx => {
     await ctx.answerCallbackQuery();
     await ctx.deleteMessage();
 });
 
-// Every action on a single integration looks up the hook within the current chat and checks permissions first.
-// The callback data also carries the list page to return to.
 const hookAction = (
     action: string,
     handler: (ctx: Context, hook: IHook, page: number) => Promise<unknown>,
@@ -139,6 +128,14 @@ const hookAction = (
         async ctx => {
             if (!ctx.chat) {
                 return ctx.answerCallbackQuery();
+            }
+
+            if (!(await isAdmin(ctx))) {
+                await ctx.answerCallbackQuery({
+                    text: NOT_ADMIN_TEXT,
+                    show_alert: true,
+                });
+                return;
             }
 
             const page = Number(ctx.match![2] ?? 0);
@@ -156,14 +153,6 @@ const hookAction = (
                 await ctx.editMessageText(text, {
                     ...editOptions,
                     reply_markup,
-                });
-                return;
-            }
-
-            if (!(await canManage(ctx, hook))) {
-                await ctx.answerCallbackQuery({
-                    text: NOT_ALLOWED_TEXT,
-                    show_alert: true,
                 });
                 return;
             }

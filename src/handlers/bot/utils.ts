@@ -1,6 +1,6 @@
 import escapeHtml from '@youtwitface/escape-html';
 import { randomBytes } from 'crypto';
-import { Api } from 'grammy';
+import { Api, Context, NextFunction } from 'grammy';
 import type { User } from 'grammy/types';
 import env from '../../env';
 import {
@@ -29,6 +29,51 @@ export const getThreadId = (msg?: {
     is_topic_message?: boolean;
     message_thread_id?: number;
 }) => (msg?.is_topic_message ? msg.message_thread_id : undefined);
+
+export const NOT_ADMIN_TEXT = 'Only chat admins can do this.';
+
+export const isAdmin = async (ctx: Context) => {
+    if (!ctx.chat) {
+        return false;
+    }
+
+    if (
+        ctx.chat.type === 'private' ||
+        ctx.chat.type === 'channel' ||
+        ctx.senderChat?.id === ctx.chat.id
+    ) {
+        return true;
+    }
+
+    if (!ctx.from) {
+        return false;
+    }
+
+    try {
+        const member = await ctx.getChatMember(ctx.from.id);
+        return member.status === 'creator' || member.status === 'administrator';
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+};
+
+export const adminOnly = async (ctx: Context, next: NextFunction) => {
+    if (await isAdmin(ctx)) {
+        return next();
+    }
+
+    if (ctx.callbackQuery) {
+        await ctx.answerCallbackQuery({
+            text: NOT_ADMIN_TEXT,
+            show_alert: true,
+        });
+    } else if (ctx.msg) {
+        await ctx.reply(NOT_ADMIN_TEXT, {
+            reply_parameters: { message_id: ctx.msg.message_id },
+        });
+    }
+};
 
 const reposCache = new Map<number, { repos: Repo[]; expires: number }>();
 
