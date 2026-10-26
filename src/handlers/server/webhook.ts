@@ -126,6 +126,30 @@ const formatHtmlMessage = (
     )}`;
 };
 
+// Keeps the subject on the commit line and moves the rest of the message into
+// a collapsed quote, so long messages don't run into the next commit.
+const formatCommit = (commit: any, repo: string) => {
+    const [subject, ...rest] = truncateText(
+        commit.message.replace(/\r\n?/g, '\n').trim(),
+        MAX_COMMIT_MESSAGE_LENGTH,
+    ).split('\n');
+    const description = rest.join('\n').trim();
+
+    return `<a href="${commit.url}">${commit.id.slice(0, 8)}</a>: ${autolink(
+        subject,
+        repo,
+        escapeHtml,
+    )} by ${escapeHtml(commit.author.name)}${
+        description
+            ? `\n<blockquote expandable>${autolink(
+                  description,
+                  repo,
+                  escapeHtml,
+              )}</blockquote>`
+            : ''
+    }`;
+};
+
 const formatPushMessage = (body: any) => {
     const commits: any[] = body.commits;
     const header = `🔨 <b><a href="${body.compare}">${commits.length} new commit${
@@ -133,13 +157,8 @@ const formatPushMessage = (body: any) => {
     }</a> to ${escapeHtml(body.repository.name)}:${escapeHtml(
         body.ref.replace(/^refs\/[^/]+\//, ''),
     )}:</b>\n\n`;
-    const lines = commits.map(
-        commit =>
-            `<a href="${commit.url}">${commit.id.slice(0, 8)}</a>: ${autolink(
-                truncateText(commit.message, MAX_COMMIT_MESSAGE_LENGTH),
-                body.repository.full_name,
-                escapeHtml,
-            )} by ${escapeHtml(commit.author.name)}`,
+    const lines = commits.map(commit =>
+        formatCommit(commit, body.repository.full_name),
     );
 
     const message = `${header}${lines.join('\n')}`;
