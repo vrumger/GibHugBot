@@ -23,6 +23,8 @@ Mentions (`@user`, `@org/team`), issue and pull request references (`#123`, `GH-
 
 In groups with topics enabled, connect the repository from inside a topic and its notifications are posted to that topic.
 
+When Telegram upgrades a group to a supergroup, the bot automatically moves all of its connected repositories to the new chat ID. If the bot missed the migration notice, it also handles Telegram's migration error by moving the repositories and retrying the failed API call once with the new ID. Existing GitHub webhooks are kept, so you don't need to reconnect them.
+
 You need admin access to a repository to connect it, because the bot creates a webhook on it.
 
 In groups, only chat admins can use the bot's commands (`/new`, `/integrations`, `/export`, `/import`) and connect repositories with inline mode.
@@ -106,7 +108,7 @@ npm run dev
 | `npm run dev`   | Run the bot with `ts-node`     |
 | `npm run build` | Compile TypeScript to `build/` |
 | `npm start`     | Run the compiled bot           |
-| `npm test`      | Type-check the project         |
+| `npm test`      | Type-check and run tests       |
 | `npm run lint`  | Lint the source with ESLint    |
 
 ## License

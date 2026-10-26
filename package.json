@@ -7,7 +7,7 @@
         "start": "node build/index.js",
         "dev": "ts-node src/index.ts",
         "build": "tsc",
-        "test": "tsc --noEmit",
+        "test": "tsc --noEmit && node --test --require ts-node/register tests/*.test.cjs",
         "lint": "eslint src/"
     },
     "repository": {

@@ -1,7 +1,8 @@
-import { Bot } from 'grammy';
 import { apiThrottler } from '@grammyjs/transformer-throttler';
+import { Bot } from 'grammy';
 import env from './env';
 import botHandlers from './handlers/bot';
+import { migrateChat } from './migration';
 
 const bot = new Bot(env.BOT_TOKEN);
 
@@ -11,6 +12,7 @@ bot.catch(err => {
 });
 
 bot.api.config.use(apiThrottler());
+bot.api.config.use(migrateChat);
 
 bot.use(botHandlers);
 
