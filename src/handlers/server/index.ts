@@ -7,12 +7,6 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import Hook from '../../models/hook';
 import { handleWebhook } from './webhook';
 
-const base64Decode = (data: string) =>
-    Buffer.from(
-        data.padEnd(Math.ceil(data.length / 4) * 4),
-        'base64',
-    ).toString();
-
 const router = Router();
 
 router.get('/github/callback', async (req, res) => {
@@ -78,7 +72,7 @@ router.get('/github/callback', async (req, res) => {
 
 router.post(
     '/github/webhook/:repo',
-    raw({ type: 'application/json' }),
+    raw({ type: 'application/json', limit: '25mb' }),
     async (req, res) => {
         const githubHookId = req.header('X-GitHub-Hook-ID');
         if (!githubHookId) {
